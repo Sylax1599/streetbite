@@ -4,17 +4,16 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import { AppError } from './shared/errores';
 import { ApiResponse } from './shared/types';
+import authRouter from './modules/auth/auth.controller';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Middlewares globales
 app.use(helmet());
 app.use(cors());
 app.use(morgan('combined'));
 app.use(express.json());
 
-// Health check — Cloud Run llama este endpoint para saber si el contenedor está vivo
 app.get('/health', (_req: Request, res: Response) => {
   res.json({
     ok: true,
@@ -24,7 +23,9 @@ app.get('/health', (_req: Request, res: Response) => {
   });
 });
 
-// Manejador global de errores (similar a @ControllerAdvice en Spring)
+app.use('/auth', authRouter);
+console.log('Rutas auth registradas:', authRouter.stack?.map((r: any) => r.route?.path));
+
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error(JSON.stringify({
     severity: 'ERROR',
