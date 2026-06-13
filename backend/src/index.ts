@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import { AppError } from './shared/errores';
 import { ApiResponse } from './shared/types';
 import authRouter from './modules/auth/auth.controller';
+import restaurantesRouter from './modules/restaurantes/restaurantes.controller';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -24,7 +25,7 @@ app.get('/health', (_req: Request, res: Response) => {
 });
 
 app.use('/auth', authRouter);
-console.log('Rutas auth registradas:', authRouter.stack?.map((r: any) => r.route?.path));
+app.use('/restaurantes', restaurantesRouter);
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error(JSON.stringify({
