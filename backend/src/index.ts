@@ -6,6 +6,7 @@ import { AppError } from './shared/errores';
 import { ApiResponse } from './shared/types';
 import authRouter from './modules/auth/auth.controller';
 import restaurantesRouter from './modules/restaurantes/restaurantes.controller';
+import pedidosRouter from './modules/pedidos/pedidos.controller';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -26,6 +27,7 @@ app.get('/health', (_req: Request, res: Response) => {
 
 app.use('/auth', authRouter);
 app.use('/restaurantes', restaurantesRouter);
+app.use('/pedidos', pedidosRouter);
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error(JSON.stringify({
