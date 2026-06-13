@@ -1,0 +1,67 @@
+steps:
+  # Paso 1: Instalar dependencias y verificar que TypeScript compila
+  - name: "node:20-alpine"
+    dir: "backend"
+    entrypoint: "sh"
+    args:
+      - "-c"
+      - |
+        npm ci
+        npm run lint
+    id: "install-and-lint"
+
+  # Paso 2: Construir la imagen Docker
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "-t"
+      - "us-central1-docker.pkg.dev/$PROJECT_ID/streetbite/api:$COMMIT_SHA"
+      - "-t"
+      - "us-central1-docker.pkg.dev/$PROJECT_ID/streetbite/api:latest"
+      - "./backend"
+    id: "build-image"
+    waitFor: ["install-and-lint"]
+
+  # Paso 3: Push a Artifact Registry
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "push"
+      - "--all-tags"
+      - "us-central1-docker.pkg.dev/$PROJECT_ID/streetbite/api"
+    id: "push-image"
+    waitFor: ["build-image"]
+
+  # Paso 4: Deploy a Cloud Run
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: "gcloud"
+    args:
+      - "run"
+      - "deploy"
+      - "streetbite-api"
+      - "--image"
+      - "us-central1-docker.pkg.dev/$PROJECT_ID/streetbite/api:$COMMIT_SHA"
+      - "--region"
+      - "us-central1"
+      - "--platform"
+      - "managed"
+      - "--allow-unauthenticated"
+      - "--port"
+      - "8080"
+      - "--memory"
+      - "512Mi"
+      - "--set-env-vars"
+      - "GOOGLE_CLOUD_PROJECT=$PROJECT_ID"
+    id: "deploy"
+    waitFor: ["push-image"]
+
+# Imagen final en el registro
+images:
+  - "us-central1-docker.pkg.dev/$PROJECT_ID/streetbite/api"
+
+# Opciones globales del pipeline
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: "E2_HIGHCPU_8"
+
+# Timeout total del pipeline
+timeout: "1200s"
