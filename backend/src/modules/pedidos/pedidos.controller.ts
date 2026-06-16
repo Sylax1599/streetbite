@@ -99,7 +99,7 @@ router.patch('/:id/estado', verificarToken, async (
       req.params.id as string,
       estado,
       req.usuario!.uid,
-      req.usuario!.rol,
+      req.usuario!.rol || 'cliente',
       domiciliarioId
     );
 
