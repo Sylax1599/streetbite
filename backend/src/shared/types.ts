@@ -15,7 +15,7 @@ export type EstadoPedido =
 export interface UsuarioAutenticado {
   uid: string;
   email: string;
-  rol: Rol;
+  rol: Rol | null;
   nombre?: string;
 }
 

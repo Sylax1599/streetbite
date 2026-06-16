@@ -27,22 +27,14 @@ export const verificarToken = async (
     }
 
     const token = authHeader.split('Bearer ')[1];
-
-    // Firebase Admin verifica la firma, expiración y proyecto del token
     const decodedToken = await auth.verifyIdToken(token);
 
-    // Extraemos el rol desde los custom claims del token
-    const rol = decodedToken.rol as Rol | undefined;
-
-    if (!rol) {
-      throw new ForbiddenError('Usuario sin rol asignado');
-    }
-
-    // Adjuntamos el usuario al request — disponible en todos los handlers siguientes
+    // No exigimos rol aquí — puede ser null si el usuario
+    // se acaba de crear y aún no pasó por /auth/registro
     req.usuario = {
       uid: decodedToken.uid,
       email: decodedToken.email || '',
-      rol,
+      rol: (decodedToken.rol as Rol) ?? null,
       nombre: decodedToken.nombre,
     };
 
@@ -50,6 +42,17 @@ export const verificarToken = async (
   } catch (error) {
     next(error);
   }
+};
+
+export const requiereRolAsignado = (
+  req: Request,
+  _res: Response,
+  next: NextFunction
+) => {
+  if (!req.usuario?.rol || req.usuario.rol === 'cliente' && !req.usuario.uid) {
+    return next(new ForbiddenError('Usuario sin rol asignado'));
+  }
+  next();
 };
 
 // Factory de middleware para restringir por rol
@@ -60,7 +63,7 @@ export const requiereRol = (...roles: Rol[]) => {
       return next(new NoAutorizadoError());
     }
 
-    if (!roles.includes(req.usuario.rol)) {
+    if (!req.usuario.rol || !roles.includes(req.usuario.rol)) {
       return next(
         new ForbiddenError(
           `Acción restringida para: ${roles.join(', ')}`
