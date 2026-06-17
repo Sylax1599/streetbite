@@ -58,7 +58,7 @@ router.post('/', verificarToken, requiereRol('restaurante'), async (
   next: NextFunction
 ) => {
   try {
-    const { nombre, descripcion, direccion } = req.body;
+    const { nombre, descripcion, direccion, lat, lng } = req.body;
 
     if (!nombre || !descripcion || !direccion) {
       throw new ValidationError('nombre, descripcion y direccion son requeridos');
@@ -66,7 +66,7 @@ router.post('/', verificarToken, requiereRol('restaurante'), async (
 
     const restaurante = await restaurantesService.crear(
       req.usuario!.uid,
-      { nombre, descripcion, direccion }
+      { nombre, descripcion, direccion, lat, lng }
     );
 
     res.status(201).json({ ok: true, data: restaurante });

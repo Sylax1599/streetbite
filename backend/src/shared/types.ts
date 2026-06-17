@@ -49,6 +49,8 @@ export interface Restaurante {
   descripcion: string;
   logoUrl?: string;
   direccion: string;
+  lat?: number;
+  lng?: number;
   activo: boolean;
   propietarioId: string;
   creadoEn: FirebaseFirestore.Timestamp | Date;
