@@ -118,7 +118,7 @@ export class RestaurantesService {
       throw new ForbiddenError('No eres el propietario');
     }
 
-    const bucket = storage.bucket(`${process.env.GOOGLE_CLOUD_PROJECT}.appspot.com`);
+    const bucket = storage.bucket(`streetbite-dev.firebasestorage.app`);
     const archivo = bucket.file(`restaurantes/${restauranteId}/logo.jpg`);
 
     const [url] = await archivo.getSignedUrl({
@@ -194,7 +194,7 @@ export class RestaurantesService {
       throw new ForbiddenError('No eres el propietario');
     }
 
-    const bucket = storage.bucket(`${process.env.GOOGLE_CLOUD_PROJECT}.appspot.com`);
+    const bucket = storage.bucket(`streetbite-dev.firebasestorage.app`);
     const archivo = bucket.file(`restaurantes/${restauranteId}/platos/${platoId}.jpg`);
 
     const [url] = await archivo.getSignedUrl({
