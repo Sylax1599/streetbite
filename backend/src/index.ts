@@ -8,6 +8,8 @@ import authRouter from './modules/auth/auth.controller';
 import restaurantesRouter from './modules/restaurantes/restaurantes.controller';
 import pedidosRouter from './modules/pedidos/pedidos.controller';
 import domiciliosRouter from './modules/domicilios/domicilios.controller';
+import calificacionesRouter from './modules/calificaciones/calificaciones.controller';
+import { autoConfirmarEntregas } from './modules/pedidos/pedidos.cron';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -30,6 +32,7 @@ app.use('/auth', authRouter);
 app.use('/restaurantes', restaurantesRouter);
 app.use('/pedidos', pedidosRouter);
 app.use('/domicilios', domiciliosRouter);
+app.use('/calificaciones', calificacionesRouter);
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error(JSON.stringify({
@@ -59,6 +62,16 @@ app.listen(PORT, () => {
     severity: 'INFO',
     message: `StreetBite API corriendo en puerto ${PORT}`,
   }));
+});
+
+app.post('/internal/auto-confirmar', async (req: Request, res: Response) => {
+  const secret = req.headers['x-cron-secret'];
+  if (secret !== process.env.CRON_SECRET) {
+    return res.status(403).json({ ok: false, mensaje: 'No autorizado' });
+  }
+
+  const confirmados = await autoConfirmarEntregas();
+  res.json({ ok: true, confirmados });
 });
 
 export default app;

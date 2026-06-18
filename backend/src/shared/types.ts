@@ -7,6 +7,7 @@ export type EstadoPedido =
   | 'aceptado'
   | 'en_preparacion'
   | 'listo'
+  | 'entregado_pendiente'
   | 'en_camino'
   | 'entregado'
   | 'cancelado';
@@ -19,7 +20,6 @@ export interface UsuarioAutenticado {
   nombre?: string;
 }
 
-// Item dentro de un pedido
 export interface ItemPedido {
   platoId: string;
   nombre: string;
@@ -38,6 +38,8 @@ export interface Pedido {
   total: number;
   direccionEntrega: string;
   notas?: string;
+  entregadoPendienteEn?: FirebaseFirestore.Timestamp | Date;
+  calificado?: boolean;
   creadoEn: FirebaseFirestore.Timestamp | Date;
   actualizadoEn: FirebaseFirestore.Timestamp | Date;
 }
@@ -75,4 +77,13 @@ export interface ApiResponse<T> {
   error?: string;
 }
 
-// COMENTARIO PARA VER EL BUILD
+export interface Calificacion {
+  id?: string;
+  pedidoId: string;
+  clienteId: string;
+  restauranteId: string;
+  domiciliarioId?: string;
+  estrellas: number; // 1-5
+  comentario?: string;
+  creadoEn: FirebaseFirestore.Timestamp | Date;
+}

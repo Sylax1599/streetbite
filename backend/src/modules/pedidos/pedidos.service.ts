@@ -6,23 +6,24 @@ import { notificacionesService } from '../notificaciones/notificaciones.service'
 // Mapa de transiciones válidas de estado
 // Un pedido solo puede avanzar en este orden, nunca saltar pasos ni retroceder
 const TRANSICIONES_VALIDAS: Record<EstadoPedido, EstadoPedido[]> = {
-  creado:         ['aceptado', 'cancelado'],
-  aceptado:       ['en_preparacion', 'cancelado'],
-  en_preparacion: ['listo'],
-  listo:          ['en_camino'],
-  en_camino:      ['entregado'],
-  entregado:      [],
-  cancelado:      [],
+  creado:               ['aceptado', 'cancelado'],
+  aceptado:             ['en_preparacion', 'cancelado'],
+  en_preparacion:       ['listo'],
+  listo:                ['en_camino'],
+  en_camino:            ['entregado_pendiente'],
+  entregado_pendiente:  ['entregado'], // confirmación del cliente o auto-confirm
+  entregado:            [],
+  cancelado:            [],
 };
 
-// Mensajes de notificación para cada transición
 const MENSAJES_NOTIFICACION: Partial<Record<EstadoPedido, { titulo: string; cuerpo: string }>> = {
-  aceptado:       { titulo: '¡Pedido aceptado! 🎉', cuerpo: 'El restaurante aceptó tu pedido y lo está preparando.' },
-  en_preparacion: { titulo: 'Preparando tu pedido 👨‍🍳', cuerpo: 'Tu comida está siendo preparada.' },
-  listo:          { titulo: '¡Tu pedido está listo! 📦', cuerpo: 'Un domiciliario recogerá tu pedido pronto.' },
-  en_camino:      { titulo: '¡Tu pedido va en camino! 🛵', cuerpo: 'El domiciliario está llevando tu pedido.' },
-  entregado:      { titulo: '¡Pedido entregado! ✅', cuerpo: '¡Que lo disfrutes! No olvides calificar tu experiencia.' },
-  cancelado:      { titulo: 'Pedido cancelado', cuerpo: 'Tu pedido fue cancelado.' },
+  aceptado:             { titulo: '¡Pedido aceptado! 🎉', cuerpo: 'El restaurante aceptó tu pedido y lo está preparando.' },
+  en_preparacion:       { titulo: 'Preparando tu pedido', cuerpo: 'Tu comida está siendo preparada.' },
+  listo:                { titulo: '¡Tu pedido está listo!', cuerpo: 'Un domiciliario recogerá tu pedido pronto.' },
+  en_camino:            { titulo: '¡Tu pedido va en camino!', cuerpo: 'El domiciliario está llevando tu pedido.' },
+  entregado_pendiente:  { titulo: '¿Recibiste tu pedido?', cuerpo: 'Confirma que llegó para completar tu orden.' },
+  entregado:            { titulo: '¡Pedido completado!', cuerpo: '¡Que lo disfrutes! Califica tu experiencia.' },
+  cancelado:            { titulo: 'Pedido cancelado', cuerpo: 'Tu pedido fue cancelado.' },
 };
 
 export class PedidosService {
@@ -149,89 +150,138 @@ export class PedidosService {
     return { id: doc.id, ...doc.data() } as Pedido;
   }
 
-  // Cambia el estado de un pedido — el método más importante
-  async cambiarEstado(
-    pedidoId: string,
-    nuevoEstado: EstadoPedido,
-    uid: string,
-    rol: string,
-    domiciliarioId?: string
-  ): Promise<void> {
+async cambiarEstado(
+  pedidoId: string,
+  nuevoEstado: EstadoPedido,
+  uid: string,
+  rol: string,
+  domiciliarioId?: string
+): Promise<void> {
 
-    const doc = await db.collection('pedidos').doc(pedidoId).get();
-    if (!doc.exists) throw new NotFoundError('Pedido');
+  const doc = await db.collection('pedidos').doc(pedidoId).get();
+  if (!doc.exists) throw new NotFoundError('Pedido');
 
-    const pedido = doc.data() as Pedido;
-    const estadoActual = pedido.estado;
+  const pedido = doc.data() as Pedido;
+  const estadoActual = pedido.estado;
 
-    // Verifica que la transición es válida
-    if (!TRANSICIONES_VALIDAS[estadoActual].includes(nuevoEstado)) {
-      throw new ValidationError(
-        `No se puede cambiar de "${estadoActual}" a "${nuevoEstado}"`
-      );
-    }
+  if (!TRANSICIONES_VALIDAS[estadoActual].includes(nuevoEstado)) {
+    throw new ValidationError(
+      `No se puede cambiar de "${estadoActual}" a "${nuevoEstado}"`
+    );
+  }
 
-    // Verifica que quien cambia el estado tiene permisos para hacerlo
-    this.verificarPermisosCambioEstado(pedido, nuevoEstado, uid, rol);
+  this.verificarPermisosCambioEstado(pedido, nuevoEstado, uid, rol);
 
-    const actualizacion: Partial<Pedido> & { domiciliarioId?: string } = {
-      estado: nuevoEstado,
-      actualizadoEn: new Date(),
-    };
+  const actualizacion: Partial<Pedido> & { domiciliarioId?: string } = {
+    estado: nuevoEstado,
+    actualizadoEn: new Date(),
+  };
 
-    // Si se asigna domiciliario al pasar a en_camino
-    if (nuevoEstado === 'en_camino' && domiciliarioId) {
-      actualizacion.domiciliarioId = domiciliarioId;
-    }
+  if (nuevoEstado === 'en_camino' && domiciliarioId) {
+    actualizacion.domiciliarioId = domiciliarioId;
+  }
 
-    await db.collection('pedidos').doc(pedidoId).update(actualizacion);
+  // Marca el timestamp para el auto-confirm
+  if (nuevoEstado === 'entregado_pendiente') {
+    actualizacion.entregadoPendienteEn = new Date();
+  }
 
-    // Notifica al cliente sobre el cambio de estado
-    const mensaje = MENSAJES_NOTIFICACION[nuevoEstado];
-    if (mensaje) {
-      await notificacionesService.notificarUsuario(
-        pedido.clienteId,
-        mensaje.titulo,
-        mensaje.cuerpo,
-        { pedidoId, estado: nuevoEstado, tipo: 'cambio_estado' }
-      );
-    }
+  await db.collection('pedidos').doc(pedidoId).update(actualizacion);
 
-    // Si el pedido está listo, notifica a los domiciliarios disponibles
-    if (nuevoEstado === 'listo') {
-      await this.notificarDomiciliariosDisponibles(pedidoId, pedido.restauranteId);
+  const mensaje = MENSAJES_NOTIFICACION[nuevoEstado];
+  if (mensaje) {
+    await notificacionesService.notificarUsuario(
+      pedido.clienteId,
+      mensaje.titulo,
+      mensaje.cuerpo,
+      { pedidoId, estado: nuevoEstado, tipo: 'cambio_estado' }
+    );
+  }
+
+  if (nuevoEstado === 'listo') {
+    await this.notificarDomiciliariosDisponibles(pedidoId, pedido.restauranteId);
+  }
+}
+
+// Nuevo método — confirmación explícita del cliente
+async confirmarEntrega(pedidoId: string, clienteId: string): Promise<void> {
+  const doc = await db.collection('pedidos').doc(pedidoId).get();
+  if (!doc.exists) throw new NotFoundError('Pedido');
+
+  const pedido = doc.data() as Pedido;
+
+  if (pedido.clienteId !== clienteId) {
+    throw new ForbiddenError('No eres el dueño de este pedido');
+  }
+
+  if (pedido.estado !== 'entregado_pendiente') {
+    throw new ValidationError('Este pedido no está pendiente de confirmación');
+  }
+
+  await db.collection('pedidos').doc(pedidoId).update({
+    estado: 'entregado',
+    actualizadoEn: new Date(),
+  });
+
+  await notificacionesService.notificarUsuario(
+    pedido.clienteId,
+    '¡Gracias! 🎉',
+    '¿Qué tal estuvo tu pedido? Califícalo.',
+    { pedidoId, tipo: 'solicitar_calificacion' }
+  );
+}
+
+// Nuevo método — reporta un problema en vez de confirmar
+async reportarProblemaEntrega(pedidoId: string, clienteId: string, descripcion: string): Promise<void> {
+  const doc = await db.collection('pedidos').doc(pedidoId).get();
+  if (!doc.exists) throw new NotFoundError('Pedido');
+
+  const pedido = doc.data() as Pedido;
+
+  if (pedido.clienteId !== clienteId) {
+    throw new ForbiddenError('No eres el dueño de este pedido');
+  }
+
+  // No cambiamos el estado automáticamente — queda para revisión manual
+  await db.collection('pedidos').doc(pedidoId).update({
+    actualizadoEn: new Date(),
+    reporteProblema: descripcion,
+  });
+}
+
+private verificarPermisosCambioEstado(
+  pedido: Pedido,
+  nuevoEstado: EstadoPedido,
+  uid: string,
+  rol: string
+): void {
+  if (['aceptado', 'en_preparacion', 'listo'].includes(nuevoEstado)) {
+    if (rol !== 'restaurante') {
+      throw new ForbiddenError('Solo el restaurante puede realizar esta acción');
     }
   }
 
-  // Verifica que el rol correcto está haciendo el cambio de estado correcto
-  private verificarPermisosCambioEstado(
-    pedido: Pedido,
-    nuevoEstado: EstadoPedido,
-    uid: string,
-    rol: string
-  ): void {
-    // El restaurante acepta, prepara y marca como listo
-    if (['aceptado', 'en_preparacion', 'listo'].includes(nuevoEstado)) {
-      if (rol !== 'restaurante') {
-        throw new ForbiddenError('Solo el restaurante puede realizar esta acción');
-      }
-    }
-
-    // El domiciliario marca en camino y entregado
-    if (['en_camino', 'entregado'].includes(nuevoEstado)) {
-      if (rol !== 'domiciliario') {
-        throw new ForbiddenError('Solo el domiciliario puede realizar esta acción');
-      }
-    }
-
-    // El cliente o restaurante pueden cancelar (solo si está en creado o aceptado)
-    if (nuevoEstado === 'cancelado') {
-      const puedeCancel = pedido.clienteId === uid || rol === 'restaurante';
-      if (!puedeCancel) {
-        throw new ForbiddenError('No tienes permisos para cancelar este pedido');
-      }
+  // El domiciliario marca en_camino y entregado_pendiente (llegó al destino)
+  if (['en_camino', 'entregado_pendiente'].includes(nuevoEstado)) {
+    if (rol !== 'domiciliario') {
+      throw new ForbiddenError('Solo el domiciliario puede realizar esta acción');
     }
   }
+
+  // Solo el cliente confirma la entrega final
+  if (nuevoEstado === 'entregado') {
+    if (pedido.clienteId !== uid && rol !== 'sistema') {
+      throw new ForbiddenError('Solo el cliente puede confirmar la entrega');
+    }
+  }
+
+  if (nuevoEstado === 'cancelado') {
+    const puedeCancel = pedido.clienteId === uid || rol === 'restaurante';
+    if (!puedeCancel) {
+      throw new ForbiddenError('No tienes permisos para cancelar este pedido');
+    }
+  }
+}
 
   // Notifica a todos los domiciliarios activos cuando un pedido está listo
   private async notificarDomiciliariosDisponibles(

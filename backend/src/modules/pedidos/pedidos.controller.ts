@@ -109,4 +109,32 @@ router.patch('/:id/estado', verificarToken, async (
   }
 });
 
+// PATCH /pedidos/:id/confirmar-entrega — el cliente confirma que recibió el pedido
+router.patch('/:id/confirmar-entrega', verificarToken, requiereRol('cliente'), async (
+  req: Request, res: Response, next: NextFunction
+) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    await pedidosService.confirmarEntrega(id, req.usuario!.uid);
+    res.json({ ok: true, mensaje: 'Entrega confirmada' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PATCH /pedidos/:id/reportar-problema — el cliente reporta que no le llegó
+router.patch('/:id/reportar-problema', verificarToken, requiereRol('cliente'), async (
+  req: Request, res: Response, next: NextFunction
+) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { descripcion } = req.body;
+    if (!descripcion) throw new ValidationError('descripcion es requerida');
+    await pedidosService.reportarProblemaEntrega(id, req.usuario!.uid, descripcion);
+    res.json({ ok: true, mensaje: 'Reporte enviado, nuestro equipo lo revisará' });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;
